@@ -146,7 +146,12 @@ func (sd *SyncDir) Watch() (err error) {
 	// eventToggle := false
 	for {
 		event := <-watcher.Events
+		_, fname := filepath.Split(event.Name)
+		if string(fname[0]) == "." {
+			continue
+		}
 		log.Debug(event)
+
 		sd.Lock()
 		if !sd.updating {
 			hasSynced = false
