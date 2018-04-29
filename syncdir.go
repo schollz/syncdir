@@ -47,7 +47,9 @@ func New(dir, port, passcode string) (sd *SyncDir, err error) {
 	lastModified := time.Date(0, 1, 1, 0, 0, 0, 0, time.UTC)
 	sd.Lock()
 	for f := range sd.pathToFile {
-		log.Debug(f, sd.pathToFile[f].ModTime.UTC())
+		if string(f[0]) == "." {
+			continue
+		}
 		if lastModified.Sub(sd.pathToFile[f].ModTime.UTC()) < 0 {
 			lastModified = sd.pathToFile[f].ModTime.UTC()
 		}
