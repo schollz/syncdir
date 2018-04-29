@@ -264,6 +264,7 @@ func (sd *SyncDir) listen() (err error) {
 				if !f.IsDir {
 					err = ioutil.WriteFile(f.Path, f.Content, f.Mode)
 					if err != nil {
+						log.Warn("writefile", err)
 						continue
 					}
 				} else {
@@ -272,10 +273,12 @@ func (sd *SyncDir) listen() (err error) {
 
 				err = os.Chmod(f.Path, f.Mode)
 				if err != nil {
+					log.Warn("chmod", err)
 					continue
 				}
 				err = os.Chtimes(f.Path, *f.ModTime, *f.ModTime)
 				if err != nil {
+					log.Warn("chtimes", err)
 					continue
 				}
 				log.Infof("updated %s from %s", f.Path, c.Request.RemoteAddr)
