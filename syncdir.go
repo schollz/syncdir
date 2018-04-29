@@ -269,6 +269,10 @@ func (sd *SyncDir) listen() (err error) {
 			}
 
 			sd.Lock()
+			if sd.updating == true {
+				sd.Unlock()
+				return
+			}
 			sd.updating = true
 			sd.Unlock()
 
