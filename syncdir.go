@@ -119,9 +119,10 @@ func (sd *SyncDir) Watch() (err error) {
 	}
 	defer watcher.Close()
 
-	toWatch := []string{}
+	sd.getFiles()
 	sd.RLock()
 	currentDir := sd.Directory
+	toWatch := []string{currentDir}
 	for p := range sd.pathToFile {
 		if !sd.pathToFile[p].IsDir {
 			continue
@@ -133,6 +134,7 @@ func (sd *SyncDir) Watch() (err error) {
 	for _, d := range toWatch {
 		watcher.Add(d)
 	}
+	log.Debugf("watching: %+v", toWatch)
 
 	lastChange := time.Now()
 	hasSynced := false
@@ -158,7 +160,6 @@ func (sd *SyncDir) Watch() (err error) {
 			log.Debug("error:", err)
 		default:
 			if time.Since(lastChange) > 1*time.Second && eventToggle {
-
 				eventToggle = false
 				log.Debug("time to do stuff")
 				// list current files
