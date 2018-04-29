@@ -67,7 +67,7 @@ func (sd *SyncDir) watchForPeers() (err error) {
 	discoveries, errDiscover := peerdiscovery.Discover(peerdiscovery.Settings{
 		Limit:     -1,
 		TimeLimit: 2 * time.Second,
-		Delay:     1 * time.Millisecond,
+		Delay:     1 * time.Second,
 		Payload:   []byte(sd.Passcode),
 	})
 	if errDiscover != nil {
@@ -98,7 +98,7 @@ func (sd *SyncDir) watchForPeers() (err error) {
 		discoveries, errDiscover = peerdiscovery.Discover(peerdiscovery.Settings{
 			Limit:     -1,
 			TimeLimit: 10 * time.Second,
-			Delay:     1 * time.Millisecond,
+			Delay:     1 * time.Second,
 			Payload:   []byte(sd.Passcode),
 		})
 		if errDiscover != nil {
