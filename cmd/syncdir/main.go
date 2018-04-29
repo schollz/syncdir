@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"path/filepath"
 
 	"github.com/schollz/syncdir"
 )
@@ -14,15 +16,19 @@ func main() {
 	flag.StringVar(&passcode, "code", "123", "passcode for running server")
 	flag.Parse()
 
-	// start a new sync dir on the current directory
-	sd, err := syncdir.New(".", port, passcode)
-	if err != nil {
-		panic(err)
-	}
 	if debug {
 		syncdir.SetLogLevel("debug")
 	} else {
 		syncdir.SetLogLevel("info")
+	}
+
+	fname, _ := filepath.Abs(".")
+	fmt.Println("synchronizing", fname)
+
+	// start a new sync dir on the current directory
+	sd, err := syncdir.New(".", port, passcode)
+	if err != nil {
+		panic(err)
 	}
 
 	sd.Watch()
