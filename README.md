@@ -1,8 +1,8 @@
 # syncdir
 
-Easily directories on local networks in sync.
+Easily keep directories on local networks in sync.
 
-*syncdir* allows any two computers to stay in sync on a local network. Just run in the directory you want to sync on each computer and they will stay in sync. 
+*syncdir* allows any two computers to stay in sync on a local network. Just run in the directory you want to sync on each computer and they will stay in sync. Each computer will discover another and then they will update each other on a file change (file creation/deletion/modification and permissions change). The first directory to change will change all the others.
 
 _Experimental! Try it but make sure to backup your folder first..._
 
