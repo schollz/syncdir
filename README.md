@@ -1,6 +1,7 @@
-# listfiles
+# syncdir
 
-Use goroutines to list files recursively.
+Keep directories in sync. *Experimental, use at your own risk.*
+
 
 # License 
 
