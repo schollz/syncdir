@@ -1,8 +1,11 @@
-# syncdir
+    syncdir 
 
-Keep directories in sync. *Experimental, use at your own risk.*
+    Keep directories in sync. *Experimental, use at your own risk.*
 
+    Install with
 
-# License 
+    go get -u -v github.com/schollz/syncdir/...
 
-MIT
+    Run with 
+
+    cd directorytosync && syncdir
