@@ -23,6 +23,7 @@ type SyncDir struct {
 	Passcode  string
 	Port      string
 
+	updating     bool
 	lastModified time.Time
 	peers        []string
 	pathToFile   map[string]listfiles.File
@@ -117,43 +118,79 @@ func (sd *SyncDir) Watch() (err error) {
 		return
 	}
 	defer watcher.Close()
+
+	toWatch := []string{}
 	sd.RLock()
-	watcher.Add(sd.Directory)
+	currentDir := sd.Directory
 	for p := range sd.pathToFile {
 		if !sd.pathToFile[p].IsDir {
 			continue
 		}
-		log.Debug("watching ", p)
-		watcher.Add(p)
+		toWatch = append(toWatch, p)
 	}
 	sd.RUnlock()
 
+	for _, d := range toWatch {
+		watcher.Add(d)
+	}
+
 	lastChange := time.Now()
 	hasSynced := false
+	eventToggle := false
 	for {
 		select {
 		case event := <-watcher.Events:
-			hasSynced = false
+			eventToggle = true
 			lastChange = time.Now()
-			log.Debug("event:", event)
+			sd.Lock()
+			if !sd.updating {
+				hasSynced = false
+				sd.lastModified = time.Now()
+				log.Debug("event:", event)
+			} else {
+				log.Debug("ignoring event:", event)
+			}
+			sd.Unlock()
 			// if event.Op&fsnotify.Write == fsnotify.Write {
 			// 	log.Debug("modified file:", event.Name)
 			// }
 		case err := <-watcher.Errors:
 			log.Debug("error:", err)
 		default:
-			if time.Since(lastChange) > 1*time.Second && !hasSynced {
+			if time.Since(lastChange) > 1*time.Second && eventToggle {
+
+				eventToggle = false
 				log.Debug("time to do stuff")
 				// list current files
 				errGetFiles := sd.getFiles()
 				if errGetFiles != nil {
 					log.Error(errGetFiles)
 				}
-				errUpdatePeers := sd.updatePeers()
-				if errUpdatePeers != nil {
-					log.Error(errUpdatePeers)
+
+				if !hasSynced {
+					errUpdatePeers := sd.updatePeers()
+					if errUpdatePeers != nil {
+						log.Error(errUpdatePeers)
+					}
+					hasSynced = true
 				}
-				hasSynced = true
+				// update watchers
+				for _, d := range toWatch {
+					watcher.Remove(d)
+				}
+				toWatch = []string{currentDir}
+				sd.RLock()
+				for p := range sd.pathToFile {
+					if !sd.pathToFile[p].IsDir {
+						continue
+					}
+					toWatch = append(toWatch, p)
+				}
+				sd.RUnlock()
+				for _, d := range toWatch {
+					watcher.Add(d)
+				}
+
 			}
 		}
 	}
@@ -188,15 +225,15 @@ func (sd *SyncDir) listen() (err error) {
 	})
 	r.GET("/list", func(c *gin.Context) {
 		response := FileUpdate{
-			Hashes: make(map[uint64]struct{}),
+			Hashes: make(map[uint64]File),
 		}
 		sd.RLock()
 		defer sd.RUnlock()
 		for k := range sd.pathToFile {
-			if sd.pathToFile[k].IsDir {
-				continue
+			response.Hashes[sd.pathToFile[k].Hash] = File{
+				Path:  sd.pathToFile[k].Path,
+				IsDir: sd.pathToFile[k].IsDir,
 			}
-			response.Hashes[sd.pathToFile[k].Hash] = struct{}{}
 		}
 		response.LastModified = sd.lastModified
 		c.JSON(200, response)
@@ -208,24 +245,61 @@ func (sd *SyncDir) listen() (err error) {
 			if err != nil {
 				return
 			}
+
+			sd.Lock()
+			sd.updating = true
+			sd.Unlock()
+
+			// create files
 			for _, f := range files {
+				if f.Delete {
+					continue
+				}
+				log.Debugf("updating %s", f.Path)
 				dir := filepath.Dir(f.Path)
 				if !exists(dir) {
-					err = os.MkdirAll(dir, 0777)
+					os.MkdirAll(dir, 0777)
+				}
+
+				if !f.IsDir {
+					err = ioutil.WriteFile(f.Path, f.Content, f.Mode)
 					if err != nil {
-						return
+						continue
 					}
+				} else {
+					os.MkdirAll(f.Path, f.Mode)
 				}
-				err = ioutil.WriteFile(f.Path, f.Content, f.Mode)
+
+				err = os.Chmod(f.Path, f.Mode)
 				if err != nil {
-					return
+					continue
 				}
-				err = os.Chtimes(f.Path, f.ModTime, f.ModTime)
+				err = os.Chtimes(f.Path, *f.ModTime, *f.ModTime)
 				if err != nil {
-					return
+					continue
 				}
-				log.Debugf("created: %+v", f)
+				log.Infof("updated %s from %s", f.Path, c.Request.RemoteAddr)
+
 			}
+
+			// delete files
+			for _, f := range files {
+				if !f.Delete {
+					continue
+				}
+				log.Debugf("deleting %s", f.Path)
+				os.RemoveAll(f.Path)
+			}
+
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				sd.getFiles()
+				sd.Lock()
+				sd.updating = false
+				sd.Unlock()
+			}()
+
+			err = nil
 			return
 		}(c)
 		if err != nil {
@@ -248,6 +322,7 @@ func (sd *SyncDir) updatePeers() (err error) {
 	port := sd.Port
 	lastModified := sd.lastModified
 	hashToPath := sd.hashToPath
+	pathToFile := sd.pathToFile
 	sd.RUnlock()
 
 	if len(peers) == 0 {
@@ -258,12 +333,32 @@ func (sd *SyncDir) updatePeers() (err error) {
 		if err != nil {
 			log.Warn(err)
 		}
-		log.Debug(peer, peerList, lastModified)
 		if lastModified.Sub(peerList.LastModified) < 0 {
 			log.Debugf("%s is ahead", peer)
 			continue
 		}
 		log.Debugf("updating %s", peer)
+
+		// figure out which ones need to be deleted
+		filesToDelete := make(map[string]struct{})
+		for h := range peerList.Hashes {
+			// find which ones are in mine but aren't in peer
+			if _, ok := pathToFile[peerList.Hashes[h].Path]; !ok {
+				filesToDelete[peerList.Hashes[h].Path] = struct{}{}
+			}
+		}
+		if len(filesToDelete) > 0 {
+			log.Infof("found %d files to delete on peer %s", len(filesToDelete), peer)
+		}
+		filesToSend := make([]File, len(filesToDelete))
+		i := 0
+		for f := range filesToDelete {
+			filesToSend[i] = File{
+				Delete: true,
+				Path:   f,
+			}
+			i++
+		}
 
 		// find which of mine need to be added to peer
 		hashesToAdd := make(map[uint64]struct{})
@@ -273,33 +368,46 @@ func (sd *SyncDir) updatePeers() (err error) {
 			}
 			hashesToAdd[h] = struct{}{}
 		}
-		log.Debugf("need to add %d files: %+v", len(hashesToAdd), hashesToAdd)
+		if len(hashesToAdd) > 0 {
+			log.Infof("found %d files to add on peer %s", len(hashesToAdd), peer)
+		}
 		for h := range hashesToAdd {
 			f, err := os.Stat(hashToPath[h])
 			if err != nil {
 				log.Warn(err)
 				continue
 			}
-			content, err := ioutil.ReadFile(hashToPath[h])
-			if err != nil {
-				log.Warn(err)
-				continue
-			}
+			modTime := f.ModTime()
 			fileToSend := File{
 				Path:    hashToPath[h],
 				Size:    f.Size(),
 				Mode:    f.Mode(),
-				ModTime: f.ModTime(),
+				ModTime: &modTime,
 				IsDir:   f.IsDir(),
 				Hash:    h,
-				Content: content,
 			}
-			log.Debug(fileToSend)
-			err = sendFile(peer+":"+port, fileToSend)
+
+			if !f.IsDir() {
+				content, err := ioutil.ReadFile(hashToPath[h])
+				if err != nil {
+					log.Warn(err)
+					continue
+				}
+				fileToSend.Content = content
+			}
+
+			filesToSend = append(filesToSend, fileToSend)
+		}
+		if len(filesToSend) > 0 {
+			start := time.Now()
+			err = sendFiles("POST", peer+":"+port, filesToSend)
 			if err != nil {
-				log.Warn(err)
+				log.Warn("problem sending files", err)
+			} else {
+				log.Debugf("sent %d files in %s", len(filesToSend), time.Since(start))
 			}
 		}
+
 	}
 	return
 }
@@ -318,13 +426,13 @@ func getPeerList(server string) (peerList FileUpdate, err error) {
 	return
 }
 
-func sendFile(server string, fi File) (err error) {
-	payloadBytes, err := json.Marshal(fi)
+func sendFiles(reqtype string, server string, fis []File) (err error) {
+	payloadBytes, err := json.Marshal(fis)
 	if err != nil {
 		return
 	}
 	body := bytes.NewReader(payloadBytes)
-	req, err := http.NewRequest("POST", "http://"+server+"/update", body)
+	req, err := http.NewRequest(reqtype, "http://"+server+"/update", body)
 	if err != nil {
 		return
 	}
@@ -367,6 +475,6 @@ func middleWareHandler() gin.HandlerFunc {
 		// Run next function
 		c.Next()
 		// Log request
-		log.Infof("%v %v %v %s", c.Request.RemoteAddr, c.Request.Method, c.Request.URL, time.Since(t))
+		log.Debugf("%v %v %v %s", c.Request.RemoteAddr, c.Request.Method, c.Request.URL, time.Since(t))
 	}
 }

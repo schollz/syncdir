@@ -9,6 +9,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
 	sd.Watch()
 }
