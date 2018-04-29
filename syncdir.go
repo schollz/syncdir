@@ -433,7 +433,7 @@ func (sd *SyncDir) updatePeers() (err error) {
 			if err != nil {
 				log.Warn("problem sending files", err)
 			} else {
-				log.Debugf("sent %d files in %s", len(filesToSend), time.Since(start))
+				log.Infof("sent %d files in %s", len(filesToSend), time.Since(start))
 			}
 		}
 
