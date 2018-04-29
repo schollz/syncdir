@@ -194,60 +194,6 @@ func (sd *SyncDir) Watch() (err error) {
 			numEvents = 0
 		}(numEvents)
 
-		// select {
-		// case event := <-watcher.Events:
-		// 	eventToggle = true
-		// 	lastChange = time.Now()
-		// 	sd.Lock()
-		// 	if !sd.updating {
-		// 		hasSynced = false
-		// 		sd.lastModified = time.Now()
-		// 		log.Debug("event:", event)
-		// 	} else {
-		// 		log.Debug("ignoring event:", event)
-		// 	}
-		// 	sd.Unlock()
-		// 	// if event.Op&fsnotify.Write == fsnotify.Write {
-		// 	// 	log.Debug("modified file:", event.Name)
-		// 	// }
-		// case err := <-watcher.Errors:
-		// 	log.Debug("error:", err)
-		// default:
-		// 	if time.Since(lastChange) > 1*time.Second && eventToggle {
-		// 		eventToggle = false
-		// 		log.Debug("time to do stuff")
-		// 		// list current files
-		// 		errGetFiles := sd.getFiles()
-		// 		if errGetFiles != nil {
-		// 			log.Error(errGetFiles)
-		// 		}
-
-		// 		if !hasSynced {
-		// 			errUpdatePeers := sd.updatePeers()
-		// 			if errUpdatePeers != nil {
-		// 				log.Error(errUpdatePeers)
-		// 			}
-		// 			hasSynced = true
-		// 		}
-		// 		// update watchers
-		// 		for _, d := range toWatch {
-		// 			watcher.Remove(d)
-		// 		}
-		// 		toWatch = []string{currentDir}
-		// 		sd.RLock()
-		// 		for p := range sd.pathToFile {
-		// 			if !sd.pathToFile[p].IsDir {
-		// 				continue
-		// 			}
-		// 			toWatch = append(toWatch, p)
-		// 		}
-		// 		sd.RUnlock()
-		// 		for _, d := range toWatch {
-		// 			watcher.Add(d)
-		// 		}
-
-		// 	}
-		// }
 	}
 	return
 }
