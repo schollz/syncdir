@@ -128,6 +128,9 @@ func (sd *SyncDir) Watch() (err error) {
 		if !sd.pathToFile[p].IsDir {
 			continue
 		}
+		if string(p[0]) == "." {
+			continue
+		}
 		toWatch = append(toWatch, p)
 	}
 	sd.RUnlock()
@@ -185,6 +188,9 @@ func (sd *SyncDir) Watch() (err error) {
 				if !sd.pathToFile[p].IsDir {
 					continue
 				}
+				if string(p[0]) == "." {
+					continue
+				}
 				toWatch = append(toWatch, p)
 			}
 			sd.RUnlock()
@@ -212,6 +218,10 @@ func (sd *SyncDir) getFiles() (err error) {
 	sd.hashToPath = make(map[uint64]string)
 	for _, f := range files {
 		if f.Path == "." {
+			continue
+		}
+		_, fname := filepath.Split(f.Path)
+		if string(fname[0]) == "." {
 			continue
 		}
 		sd.pathToFile[f.Path] = f
