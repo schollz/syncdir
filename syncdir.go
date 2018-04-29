@@ -63,17 +63,17 @@ func (sd *SyncDir) watchForPeers() (err error) {
 	port := sd.Port
 	sd.RUnlock()
 
+	discoveries, errDiscover := peerdiscovery.Discover(peerdiscovery.Settings{
+		Limit:     -1,
+		TimeLimit: 2 * time.Second,
+		Delay:     1 * time.Millisecond,
+		Payload:   []byte(sd.Passcode),
+	})
+	if errDiscover != nil {
+		err = errors.Wrap(errDiscover, "problem discovering")
+		return
+	}
 	for {
-		discoveries, errDiscover := peerdiscovery.Discover(peerdiscovery.Settings{
-			Limit:     -1,
-			TimeLimit: 1 * time.Second,
-			Delay:     400 * time.Millisecond,
-			Payload:   []byte(sd.Passcode),
-		})
-		if errDiscover != nil {
-			err = errors.Wrap(errDiscover, "problem discovering")
-			return
-		}
 		peers := make([]string, len(discoveries))
 		i := 0
 		for _, discovery := range discoveries {
@@ -93,6 +93,18 @@ func (sd *SyncDir) watchForPeers() (err error) {
 		sd.Lock()
 		sd.peers = peers
 		sd.Unlock()
+
+		discoveries, errDiscover = peerdiscovery.Discover(peerdiscovery.Settings{
+			Limit:     -1,
+			TimeLimit: 10 * time.Second,
+			Delay:     1 * time.Millisecond,
+			Payload:   []byte(sd.Passcode),
+		})
+		if errDiscover != nil {
+			err = errors.Wrap(errDiscover, "problem discovering")
+			return
+		}
+
 	}
 }
 
@@ -197,22 +209,22 @@ func (sd *SyncDir) listen() (err error) {
 				return
 			}
 			for _, f := range files {
-				dir := filepath.Dir(f.Info.Path)
+				dir := filepath.Dir(f.Path)
 				if !exists(dir) {
 					err = os.MkdirAll(dir, 0777)
 					if err != nil {
 						return
 					}
 				}
-				err = ioutil.WriteFile(f.Info.Path, f.Content, f.Info.Mode)
+				err = ioutil.WriteFile(f.Path, f.Content, f.Mode)
 				if err != nil {
 					return
 				}
-				err = os.Chtimes(f.Info.Path, f.Info.ModTime, f.Info.ModTime)
+				err = os.Chtimes(f.Path, f.ModTime, f.ModTime)
 				if err != nil {
 					return
 				}
-				log.Debugf("created: %+v", f.Info)
+				log.Debugf("created: %+v", f)
 			}
 			return
 		}(c)
@@ -234,6 +246,8 @@ func (sd *SyncDir) updatePeers() (err error) {
 	sd.RLock()
 	peers := sd.peers
 	port := sd.Port
+	lastModified := sd.lastModified
+	hashToPath := sd.hashToPath
 	sd.RUnlock()
 
 	if len(peers) == 0 {
@@ -244,7 +258,48 @@ func (sd *SyncDir) updatePeers() (err error) {
 		if err != nil {
 			log.Warn(err)
 		}
-		log.Debug(peer, peerList)
+		log.Debug(peer, peerList, lastModified)
+		if lastModified.Sub(peerList.LastModified) < 0 {
+			log.Debugf("%s is ahead", peer)
+			continue
+		}
+		log.Debugf("updating %s", peer)
+
+		// find which of mine need to be added to peer
+		hashesToAdd := make(map[uint64]struct{})
+		for h := range hashToPath {
+			if _, ok := peerList.Hashes[h]; ok {
+				continue
+			}
+			hashesToAdd[h] = struct{}{}
+		}
+		log.Debugf("need to add %d files: %+v", len(hashesToAdd), hashesToAdd)
+		for h := range hashesToAdd {
+			f, err := os.Stat(hashToPath[h])
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			content, err := ioutil.ReadFile(hashToPath[h])
+			if err != nil {
+				log.Warn(err)
+				continue
+			}
+			fileToSend := File{
+				Path:    hashToPath[h],
+				Size:    f.Size(),
+				Mode:    f.Mode(),
+				ModTime: f.ModTime(),
+				IsDir:   f.IsDir(),
+				Hash:    h,
+				Content: content,
+			}
+			log.Debug(fileToSend)
+			err = sendFile(peer+":"+port, fileToSend)
+			if err != nil {
+				log.Warn(err)
+			}
+		}
 	}
 	return
 }
@@ -260,6 +315,34 @@ func getPeerList(server string) (peerList FileUpdate, err error) {
 	}
 	defer resp.Body.Close()
 	err = json.NewDecoder(resp.Body).Decode(&peerList)
+	return
+}
+
+func sendFile(server string, fi File) (err error) {
+	payloadBytes, err := json.Marshal(fi)
+	if err != nil {
+		return
+	}
+	body := bytes.NewReader(payloadBytes)
+	req, err := http.NewRequest("POST", "http://"+server+"/update", body)
+	if err != nil {
+		return
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	var target Response
+	err = json.NewDecoder(resp.Body).Decode(&target)
+	if err != nil {
+		return
+	}
+	if !target.Success {
+		err = errors.New(target.Message)
+	}
 	return
 }
 
