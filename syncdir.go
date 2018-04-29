@@ -109,6 +109,7 @@ func (sd *SyncDir) watchForPeers() (err error) {
 	}
 }
 
+// Watch starts a synchronization
 func (sd *SyncDir) Watch() (err error) {
 	go sd.watchForPeers()
 	go sd.listen()
