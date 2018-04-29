@@ -209,6 +209,9 @@ func (sd *SyncDir) getFiles() (err error) {
 	sd.pathToFile = make(map[string]listfiles.File)
 	sd.hashToPath = make(map[uint64]string)
 	for _, f := range files {
+		if f.Path == "." {
+			continue
+		}
 		sd.pathToFile[f.Path] = f
 		sd.hashToPath[f.Hash] = f.Path
 	}
