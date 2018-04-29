@@ -159,6 +159,8 @@ func (sd *SyncDir) Watch() (err error) {
 			log.Debug("event:", event)
 		} else {
 			log.Debug("ignoring event:", event)
+			sd.Unlock()
+			continue
 		}
 		sd.Unlock()
 		numEvents++
@@ -429,7 +431,13 @@ func (sd *SyncDir) updatePeers() (err error) {
 		}
 		if len(filesToSend) > 0 {
 			start := time.Now()
+			sd.Lock()
+			sd.updating = true
+			sd.Unlock()
 			err = sendFiles("POST", peer+":"+port, filesToSend)
+			sd.Lock()
+			sd.updating = false
+			sd.Unlock()
 			if err != nil {
 				log.Warn("problem sending files", err)
 			} else {
