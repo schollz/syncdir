@@ -1,10 +1,8 @@
-<p>
-<h1>syncdir</h1>
-<br>
+# syncdir
+
 <a href="https://travis-ci.org/schollz/syncdir"><img src="https://travis-ci.org/schollz/syncdir.svg?branch=master&style=flat-square" alt="Build Status"></a>
 <a href="https://github.com/schollz/syncdir/releases/latest"><img src="https://img.shields.io/badge/version-1.0.0-brightgreen.svg?style=flat-square" alt="Version"></a>
 <a href="https://goreportcard.com/report/github.com/schollz/syncdir"><img src="https://goreportcard.com/badge/github.com/schollz/syncdir" alt="Go Report Card"></a>
-</p>
 
 Easily directories on local networks in sync.
 
