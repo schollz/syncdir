@@ -270,6 +270,8 @@ func (sd *SyncDir) listen() (err error) {
 			sd.updating = true
 			sd.Unlock()
 
+			changes := 0
+
 			// create files
 			for _, f := range files {
 				if f.Delete {
@@ -301,6 +303,7 @@ func (sd *SyncDir) listen() (err error) {
 					log.Warn("chtimes", err)
 					continue
 				}
+				changes++
 				log.Infof("updated %s from %s", f.Path, c.Request.RemoteAddr)
 
 			}
@@ -312,11 +315,14 @@ func (sd *SyncDir) listen() (err error) {
 				}
 				log.Debugf("deleting %s", f.Path)
 				os.RemoveAll(f.Path)
+				changes++
 			}
 
 			go func() {
 				time.Sleep(100 * time.Millisecond)
-				sd.getFiles()
+				if changes > 0 {
+					sd.getFiles()
+				}
 				sd.Lock()
 				sd.updating = false
 				sd.Unlock()
