@@ -86,7 +86,7 @@ func (sd *SyncDir) watchForPeers() (err error) {
 			}
 			errCheck := checkPeer(discovery.Address + ":" + port)
 			if errCheck != nil {
-				// log.Debugf("peer %s recieved error: %s", discovery.Address, errCheck.Error())
+				log.Debugf("peer %s recieved error: %s", discovery.Address, errCheck.Error())
 				continue
 			}
 			peers[i] = discovery.Address
