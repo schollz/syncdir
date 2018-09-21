@@ -499,7 +499,7 @@ func sendFiles(reqtype string, server string, fis []File) (err error) {
 }
 
 func checkPeer(server string) (err error) {
-	timeout := time.Duration(1 * time.Second)
+	timeout := time.Duration(10 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 	}
