@@ -80,6 +80,7 @@ func (sd *SyncDir) watchForPeers() (err error) {
 		peers := make([]string, len(discoveries))
 		i := 0
 		for _, discovery := range discoveries {
+			log.Debugf("discovery: %+v", discovery)
 			if !bytes.Equal(discovery.Payload, passcode) {
 				continue
 			}
