@@ -350,7 +350,7 @@ func (sd *SyncDir) listen() (err error) {
 	address := getLocalIP() + ":" + sd.Port
 	sd.RUnlock()
 	log.Infof("running server on %s", address)
-	err = r.Run(address)
+	err = r.Run(":" + sd.Port)
 	return
 }
 
